@@ -12,3 +12,10 @@ npm install -D @types/node
 npx shadcn@latest init
 
 npx shadcn@latest add button input card badge pagination command popover
+
+
+
+
+
+
+npm install @tanstack/react-query @tanstack/react-query-devtools

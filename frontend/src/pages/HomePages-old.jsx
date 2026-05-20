@@ -5,34 +5,33 @@ import Header from "@/components/Header"
 import StartsAndFilters from "@/components/StartsAndFilters"
 import TaskList from "@/components/TaskList"
 import TaskListPagination from "@/components/TaskListPagination-vbeta"
-import { useTasks } from "@/hook/use-tasks"
 import { visibleTaskLimit } from "@/lib/data"
+import { apiGetTask } from "@/services/api.service"
 import { useEffect, useState } from "react"
-import Skeleton from 'react-loading-skeleton'
-import 'react-loading-skeleton/dist/skeleton.css'
 import { toast } from "sonner"
 
 const HomePages = () => {
+    const [tasksBuffer, setTasksBuffer] = useState([]);
+    const [activeCount, setActiveCount] = useState(0);
+    const [completeCount, setCompleteCount] = useState(0);
     const [filter, setFilter] = useState('all');
     const [dateQuery, setDateQuery] = useState('today');
     const [page, setPage] = useState(1);
 
+    const fetchTask = async () => {
+        const res = await apiGetTask(dateQuery);
 
-    const { data: res, isPending, isError, error, refetch } = useTasks(dateQuery);
-
-
-    // Bóc tách dữ liệu từ API thay vì dùng useState
-    const tasksBuffer = res?.status ? res.data : [];
-    const activeCount = res?.status ? res.activeCount : 0;
-    const completeCount = res?.status ? res.completeCount : 0;
-
-
-    // Đưa logic tự lùi trang vào useEffect để tránh lỗi update state khi đang render
-    useEffect(() => {
-        if (res && !res.status) {
-            toast.error(res.message);
+        if (res.status) {
+            setTasksBuffer(res.data)
+            setActiveCount(res.activeCount)
+            setCompleteCount(res.completeCount)
+        } else {
+            toast.error(res.message)
         }
-    }, [res]);
+    }
+    useEffect(() => {
+        fetchTask();
+    }, [dateQuery]);
 
 
     useEffect(() => {
@@ -53,10 +52,10 @@ const HomePages = () => {
     })
 
 
-    // Hàm gọi lại task khi thêm mới hoặc update (Dùng refetch của React Query)
+    //load lai task khi them moi
     const handleTaskChange = () => {
-        refetch();
-    };
+        fetchTask()
+    }
 
 
     //tinh toan so nhiem vu hien thi tren trang [0,1,2,3,4].slice(0,2) => [0,1]
@@ -89,10 +88,6 @@ const HomePages = () => {
         handleBack();
     }
 
-
-    if (isPending) return <Skeleton />
-    if (isError) return <p className="state-error">Lỗi: {error.message}</p>
-
     return (
 
         <>
@@ -113,7 +108,9 @@ const HomePages = () => {
                         <Header />
 
                         {/* tao nhiem vu */}
-                        <AddTask />
+                        <AddTask
+                            handleNewTaskAdd={handleTaskChange}
+                        />
 
                         {/* thong ke va bo loc */}
                         <StartsAndFilters

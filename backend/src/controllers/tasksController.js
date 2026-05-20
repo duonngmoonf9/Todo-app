@@ -61,6 +61,94 @@ const getAllTasks = async (request, response) => {
 }
 
 
+
+
+
+// Thêm hàm get data task theo pagination
+const getTasksPaginated = async (request, response) => {
+    // Nhận các tham số từ Frontend gửi lên, gán giá trị mặc định nếu không có
+    const { dateFilter = 'today', statusFilter = 'all', page = 1, limit = 5 } = request.query;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const now = new Date();
+    let startDate;
+
+    switch (dateFilter) {
+        case "today":
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            break;
+        case "week":
+            const mondayDate = now.getDate() - (now.getDay() - 1) - (now.getDay() === 0 ? 7 : 0);
+            startDate = new Date(now.getFullYear(), now.getMonth(), mondayDate);
+            break;
+        case "month":
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            break;
+        case "all":
+        default:
+            startDate = null;
+    }
+
+    const dateQuery = startDate ? { createdAt: { $gte: startDate } } : {};
+
+    // Điều kiện lọc riêng cho danh sách hiển thị
+    let listMatch = { ...dateQuery };
+    if (statusFilter === 'active') listMatch.status = 'active';
+    if (statusFilter === 'complete') listMatch.status = 'complete';
+
+    try {
+        const result = await Task.aggregate([
+            {
+                $facet: {
+                    // 1. Lấy data danh sách (có tính trang và trạng thái)
+                    tasks: [
+                        { $match: listMatch },
+                        { $sort: { createdAt: -1 } },
+                        { $skip: skip },
+                        { $limit: Number(limit) }
+                    ],
+                    // 2. Tính tổng số trang dựa trên bộ lọc
+                    totalFiltered: [
+                        { $match: listMatch },
+                        { $count: "count" }
+                    ],
+                    // 3. Tính đếm số lượng chung cho Header (chỉ dựa theo ngày)
+                    activeCount: [
+                        { $match: { ...dateQuery, status: "active" } },
+                        { $count: "count" }
+                    ],
+                    completeCount: [
+                        { $match: { ...dateQuery, status: "complete" } },
+                        { $count: "count" }
+                    ]
+                }
+            }
+        ]);
+
+        const data = result[0].tasks;
+        const totalItems = result[0].totalFiltered[0]?.count || 0;
+        const totalPages = Math.ceil(totalItems / Number(limit));
+
+        const activeCount = result[0].activeCount[0]?.count || 0;
+        const completeCount = result[0].completeCount[0]?.count || 0;
+
+        response.status(200).json({
+            data,
+            totalPages,
+            hasNextPage: Number(page) < totalPages, // Trả về flag để prefetch
+            activeCount,
+            completeCount,
+            status: true,
+            code: 200,
+            message: "get paginated tasks thanh cong"
+        });
+    } catch (error) {
+        console.log(`loi goi getTasksPaginated:, ${error}`);
+        response.status(500).json({ status: false, message: error.message });
+    }
+}
+
+
 //controller create task
 const createTask = async (request, response) => {
     try {
@@ -132,5 +220,5 @@ const deleteTask = async (request, response) => {
     }
 }
 
-export { createTask, deleteTask, getAllTasks, updateTask };
+export { createTask, deleteTask, getAllTasks, getTasksPaginated, updateTask };
 

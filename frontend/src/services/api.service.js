@@ -17,6 +17,12 @@ const apiDeleteOutcome = (id) => {
     return axios.delete(URL_BACKEND);
 }
 
-export { apiCreateTask, apiDeleteOutcome, apiGetTask, apiUpdateTask };
+
+const apiGetTaskPagination = ({ page, limit, filter, dateQuery }) => {
+    const URL_BACKEND = `/api/tasks/paginated?page=${page}&limit=${limit}&dateFilter=${dateQuery}&statusFilter=${filter}`;
+    return axios.get(URL_BACKEND);
+}
+
+export { apiCreateTask, apiDeleteOutcome, apiGetTask, apiGetTaskPagination, apiUpdateTask };
 
 //

@@ -5,91 +5,77 @@ import Header from "@/components/Header"
 import StartsAndFilters from "@/components/StartsAndFilters"
 import TaskList from "@/components/TaskList"
 import TaskListPagination from "@/components/TaskListPagination-vbeta"
-import { useTasks } from "@/hook/use-tasks"
+import { useTaskPagination } from "@/hook/use-task-pagination"
 import { visibleTaskLimit } from "@/lib/data"
+import { apiGetTaskPagination } from "@/services/api.service"
+import { useQueryClient } from "@tanstack/react-query"
 import { useEffect, useState } from "react"
 import Skeleton from 'react-loading-skeleton'
 import 'react-loading-skeleton/dist/skeleton.css'
-import { toast } from "sonner"
 
 const HomePages = () => {
+    const queryClient = useQueryClient();
     const [filter, setFilter] = useState('all');
     const [dateQuery, setDateQuery] = useState('today');
     const [page, setPage] = useState(1);
 
+    // 1. Fetch dữ liệu từ Backend
+    const { data: res, isPending, isError, error, refetch } = useTaskPagination({
+        page,
+        filter,
+        dateQuery,
+        limit: visibleTaskLimit
+    });
 
-    const { data: res, isPending, isError, error, refetch } = useTasks(dateQuery);
+    const tasks = res?.status ? res.data : [];
+    const totalPages = res?.totalPages || 0;
+    const hasNextPage = res?.hasNextPage ?? false;
+    const activeCount = res?.activeCount || 0;
+    const completeCount = res?.completeCount || 0;
 
-
-    // Bóc tách dữ liệu từ API thay vì dùng useState
-    const tasksBuffer = res?.status ? res.data : [];
-    const activeCount = res?.status ? res.activeCount : 0;
-    const completeCount = res?.status ? res.completeCount : 0;
-
-
-    // Đưa logic tự lùi trang vào useEffect để tránh lỗi update state khi đang render
-    useEffect(() => {
-        if (res && !res.status) {
-            toast.error(res.message);
-        }
-    }, [res]);
-
-
+    // 2. Logic Tự lùi về trang 1 khi đổi bộ lọc
     useEffect(() => {
         setPage(1);
     }, [filter, dateQuery]);
 
+    // 3. Logic Prefetch tải trước dữ liệu trang tiếp theo
+    useEffect(() => {
+        if (!hasNextPage) return;
+        queryClient.prefetchQuery({
+            queryKey: ["tasks", "pagination", dateQuery, filter, page + 1],
+            queryFn: () => apiGetTaskPagination({
+                page: page + 1,
+                limit: visibleTaskLimit,
+                filter: filter,
+                dateQuery: dateQuery
+            }),
+            staleTime: 5 * 1000,
+        });
+    }, [page, filter, dateQuery, hasNextPage, queryClient]);
 
-    // bien
-    const filterBuffer = tasksBuffer.filter(task => {
-        switch (filter) {
-            case "active":
-                return task.status === "active";
-            case "complete":
-                return task.status === "complete"
-            default:
-                return true
-        }
-    })
+    // 4. Các hàm xử lý
+    const handleTaskChange = () => refetch();
 
-
-    // Hàm gọi lại task khi thêm mới hoặc update (Dùng refetch của React Query)
-    const handleTaskChange = () => {
-        refetch();
-    };
-
-
-    //tinh toan so nhiem vu hien thi tren trang [0,1,2,3,4].slice(0,2) => [0,1]
-    const visibleTasks = filterBuffer.slice(
-        (page - 1) * visibleTaskLimit,
-        page * visibleTaskLimit
-    )
-
-    const totalPages = Math.ceil(filterBuffer.length / visibleTaskLimit); //tong so nhiem vu chia cho limit thi lay duoc tong so trang
-
-    // ham next trang
     const handleNext = () => {
-        if (page < totalPages) {
-            setPage(prev => prev + 1);
-        }
+        if (page < totalPages) setPage(prev => prev + 1);
     }
 
-    //ham back trang
     const handleBack = () => {
-        if (page > 1) {
-            setPage(prev => prev - 1)
+        if (page > 1) setPage(prev => prev - 1);
+    }
+
+    const handleRandom = (newPage) => setPage(newPage);
+
+    // Logic tự động lùi trang nếu trang hiện tại bị trống (do xóa hết item)
+    useEffect(() => {
+        // Chỉ chạy check khi API đã load xong (!isPending)
+        // Nếu danh sách task rỗng và đang ở trang lớn hơn 1 -> Lùi 1 trang
+        if (!isPending && tasks.length === 0 && page > 1) {
+            setPage(prev => prev - 1);
         }
-    }
-    //trang bat ky
-    const handleRandom = (newPage) => {
-        setPage(newPage)
-    }
+    }, [tasks.length, page, isPending]);
 
-    if (visibleTasks.length == 0) {
-        handleBack();
-    }
-
-
+    // 5. Early Returns
     if (isPending) return <Skeleton />
     if (isError) return <p className="state-error">Lỗi: {error.message}</p>
 
@@ -125,12 +111,11 @@ const HomePages = () => {
 
                         {/* Danh sach nhiem vu */}
                         <TaskList
-                            filteredTasks={visibleTasks}
+                            filteredTasks={tasks}
                             filter={filter}
                             handleTaskChange={handleTaskChange}
                         />
 
-                        {/* phan trang va loc theo ngay */}
                         <div className="flex flex-col items-center justify-between gap-6 sm:flex-row">
                             <TaskListPagination
                                 handleNext={handleNext}
@@ -138,7 +123,6 @@ const HomePages = () => {
                                 handleRandom={handleRandom}
                                 page={page}
                                 totalPages={totalPages}
-                                filterBuffer={filterBuffer}
                             />
                             <DateTimeFilter
                                 dateQuery={dateQuery}

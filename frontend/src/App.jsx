@@ -1,6 +1,6 @@
 import { BrowserRouter, Route, Routes } from 'react-router';
 import { Toaster } from 'sonner';
-import HomePages from './pages/HomePages';
+import HomePages from './pages/HomePages-vbeta';
 import NotFound from './pages/NotFound';
 
 function App() {
